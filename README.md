@@ -1,6 +1,6 @@
 # SupportSphere 🎯
 
-A modern, real-time customer support platform built with Next.js 14, featuring smart ticketing, live chat, and comprehensive SLA management.
+A modern, real-time customer support platform built with Next.js 14, featuring smart ticketing, live chat, and comprehensive SLA management with Devops Features.
 
 ## 🌟 Features
 
@@ -315,6 +315,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Express.js](https://expressjs.com/)
 
 ## 📧 Contact
-- Project Link: https://github.com/yourusername/supportsphere
+- Project Link: https://github.com/Chikun2004/supportsphere
 - Documentation: https://docs.supportsphere.com
 - Support: support@supportsphere.com
+- Livelink: Coming Soon ..
