@@ -1,0 +1,113 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: support-sphere-slo-rules
+  namespace: monitoring
+spec:
+  groups:
+  - name: slo.rules
+    rules:
+    - record: support_sphere:ticket_slo:ratio
+      expr: |
+        sum(rate(ticket_resolution_time_within_sla_total[1h]))
+        /
+        sum(rate(ticket_resolution_time_total[1h]))
+    - alert: SLOBudgetBurning
+      expr: |
+        (
+          support_sphere:ticket_slo:ratio < 0.95
+        )
+      for: 1h
+      labels:
+        severity: critical
+        team: support
+      annotations:
+        summary: SLO budget burning too fast
+        description: Ticket resolution SLO is at {{ $value }}%
+
+  - name: business.metrics
+    rules:
+    - record: support_sphere:customer_satisfaction:ratio
+      expr: |
+        sum(rate(customer_satisfaction_score_total[24h]))
+        /
+        sum(rate(customer_feedback_total[24h]))
+    - alert: CustomerSatisfactionDrop
+      expr: support_sphere:customer_satisfaction:ratio < 0.85
+      for: 6h
+      labels:
+        severity: warning
+        team: customer-success
+      annotations:
+        summary: Customer satisfaction below threshold
+        description: CSAT is at {{ $value }}%
+
+  - name: agent.performance
+    rules:
+    - record: support_sphere:agent_efficiency:score
+      expr: |
+        sum(rate(tickets_resolved_total[1h])) by (agent)
+        /
+        sum(rate(agent_active_time_seconds[1h])) by (agent)
+    - alert: AgentEfficiencyLow
+      expr: support_sphere:agent_efficiency:score < 0.7
+      for: 4h
+      labels:
+        severity: warning
+        team: operations
+      annotations:
+        summary: Agent efficiency below target
+        description: Agent {{ $labels.agent }} efficiency at {{ $value }}
+
+  - name: realtime.analytics
+    rules:
+    - record: support_sphere:realtime_sentiment:score
+      expr: |
+        sum(rate(customer_message_sentiment_score[5m])) by (conversation_id)
+        /
+        count(conversation_id) by (conversation_id)
+    - alert: NegativeSentimentSpike
+      expr: sum(support_sphere:realtime_sentiment:score) by (conversation_id) < -0.5
+      for: 10m
+      labels:
+        severity: warning
+        team: customer-success
+      annotations:
+        summary: High negative sentiment detected
+        description: Conversation {{ $labels.conversation_id }} showing negative sentiment
+
+  - name: platform.health
+    rules:
+    - record: support_sphere:system_health:score
+      expr: |
+        (
+          sum(up{job="support-sphere"}) 
+          + sum(rate(http_requests_total{status=~"2.."}[5m]))
+          + sum(rate(successful_database_operations_total[5m]))
+        ) / 3
+    - alert: SystemHealthDegraded
+      expr: support_sphere:system_health:score < 0.95
+      for: 15m
+      labels:
+        severity: critical
+        team: platform
+      annotations:
+        summary: Platform health degraded
+        description: Overall system health at {{ $value }}%
+
+  - name: machine_learning.metrics
+    rules:
+    - record: support_sphere:ml_accuracy:ratio
+      expr: |
+        sum(rate(ml_prediction_correct_total[1h]))
+        /
+        sum(rate(ml_prediction_total[1h]))
+    - alert: MLModelDegradation
+      expr: support_sphere:ml_accuracy:ratio < 0.90
+      for: 1h
+      labels:
+        severity: warning
+        team: ml-ops
+      annotations:
+        summary: ML model accuracy degraded
+        description: Model accuracy at {{ $value }}%

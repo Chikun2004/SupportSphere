@@ -1,0 +1,78 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: support-sphere-alerts
+  namespace: monitoring
+spec:
+  groups:
+  - name: application
+    rules:
+    - alert: HighErrorRate
+      expr: sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m])) * 100 > 5
+      for: 5m
+      labels:
+        severity: critical
+        team: backend
+      annotations:
+        summary: High HTTP error rate (> 5%)
+        description: Error rate is {{ $value }}%
+
+    - alert: SlowAPIResponse
+      expr: http_request_duration_ms_bucket{le="200"} < 0.95
+      for: 5m
+      labels:
+        severity: warning
+        team: backend
+      annotations:
+        summary: Slow API responses
+        description: 95th percentile latency is above 200ms
+
+    - alert: HighMemoryUsage
+      expr: container_memory_usage_bytes{namespace="support-sphere"} / container_memory_limit_bytes{namespace="support-sphere"} * 100 > 85
+      for: 15m
+      labels:
+        severity: warning
+        team: devops
+      annotations:
+        summary: High memory usage
+        description: Container {{ $labels.container }} memory usage is {{ $value }}%
+
+    - alert: PodCrashLooping
+      expr: rate(kube_pod_container_status_restarts_total{namespace="support-sphere"}[15m]) * 60 * 5 > 0
+      for: 15m
+      labels:
+        severity: critical
+        team: devops
+      annotations:
+        summary: Pod is crash looping
+        description: Pod {{ $labels.pod }} is restarting frequently
+
+    - alert: DatabaseConnectionIssues
+      expr: mongodb_connections{state="available"} < 10
+      for: 5m
+      labels:
+        severity: critical
+        team: database
+      annotations:
+        summary: Low database connections available
+        description: Only {{ $value }} connections available
+
+    - alert: HighCPUUsage
+      expr: sum(rate(container_cpu_usage_seconds_total{namespace="support-sphere"}[5m])) by (pod) * 100 > 80
+      for: 15m
+      labels:
+        severity: warning
+        team: devops
+      annotations:
+        summary: High CPU usage
+        description: Pod {{ $labels.pod }} CPU usage is {{ $value }}%
+
+    - alert: SSLCertExpiry
+      expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 30
+      for: 1h
+      labels:
+        severity: warning
+        team: security
+      annotations:
+        summary: SSL certificate expiring soon
+        description: SSL certificate will expire in less than 30 days

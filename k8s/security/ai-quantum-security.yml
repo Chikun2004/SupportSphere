@@ -1,0 +1,143 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: ai-quantum-security
+  namespace: support-sphere
+spec:
+  selector:
+    matchLabels:
+      app: support-sphere
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/support-sphere/sa/support-sphere-client"]
+        notRequestPrincipals: ["*"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+        paths: ["/api/*"]
+    when:
+    - key: request.auth.claims[quantum_signature]
+      values: ["verified"]
+    - key: request.auth.claims[ai_threat_score]
+      notValues: ["high", "critical"]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quantum-ai-security
+  namespace: support-sphere
+data:
+  quantum.conf: |
+    # Post-Quantum Cryptography Settings
+    pqc_algorithm: "Kyber1024"
+    key_exchange: "CRYSTALS-Kyber"
+    digital_signature: "CRYSTALS-Dilithium"
+    hash_function: "SHAKE256"
+    
+    # AI Security Settings
+    ai_model_version: "v2.0"
+    threat_detection_confidence: "0.95"
+    anomaly_detection_threshold: "0.85"
+    behavioral_analysis_window: "300"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: EnvoyFilter
+metadata:
+  name: quantum-security-filter
+  namespace: support-sphere
+spec:
+  workloadSelector:
+    labels:
+      app: support-sphere
+  configPatches:
+  - applyTo: HTTP_FILTER
+    match:
+      context: SIDECAR_INBOUND
+      listener:
+        filterChain:
+          filter:
+            name: "envoy.filters.network.http_connection_manager"
+    patch:
+      operation: INSERT_BEFORE
+      value:
+        name: quantum.security
+        typed_config:
+          "@type": type.googleapis.com/quantum.security.v1.Config
+          rules:
+            - quantum_resistant_tls: true
+            - perfect_forward_secrecy: true
+            - post_quantum_key_exchange: true
+---
+apiVersion: security.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: quantum-network-policy
+  namespace: support-sphere
+spec:
+  podSelector:
+    matchLabels:
+      app: support-sphere
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          quantum-verified: "true"
+    ports:
+    - protocol: TCP
+      port: 443
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          quantum-secure: "true"
+---
+apiVersion: ai.security/v1
+kind: ThreatPreventionPolicy
+metadata:
+  name: ai-threat-prevention
+  namespace: support-sphere
+spec:
+  modelEndpoint: "ai-security-endpoint"
+  confidenceThreshold: 0.95
+  scanTypes:
+    - behavioral
+    - anomaly
+    - pattern
+    - quantum
+  actions:
+    - block
+    - alert
+    - quarantine
+  responseTime: "50ms"
+  updateInterval: "60s"
+  features:
+    - name: "quantum_resistance"
+      enabled: true
+    - name: "ai_learning"
+      enabled: true
+    - name: "behavioral_analysis"
+      enabled: true
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: quantum-security-alerts
+  namespace: support-sphere
+spec:
+  groups:
+  - name: quantum.security
+    rules:
+    - alert: QuantumThreatDetected
+      expr: quantum_threat_score > 0.8
+      for: 1m
+      labels:
+        severity: critical
+        team: security
+      annotations:
+        summary: Quantum security threat detected
+        description: Threat score {{ $value }}

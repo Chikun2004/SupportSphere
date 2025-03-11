@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quantum-resistant-config
+  namespace: support-sphere
+data:
+  tls.conf: |
+    ssl_protocols TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers on;
+    ssl_ecdh_curve secp521r1:secp384r1;
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: quantum-resistant-auth
+  namespace: support-sphere
+spec:
+  mtls:
+    mode: STRICT
+  portLevelMtls:
+    "443":
+      mode: STRICT
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: quantum-resistant-tls
+  namespace: support-sphere
+spec:
+  host: "*.support-sphere.svc.cluster.local"
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+      cipherSuites:
+      - ECDHE-ECDSA-AES256-GCM-SHA384
+      - ECDHE-RSA-AES256-GCM-SHA384
+---
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: advanced-threat-detection
+spec:
+  endpointSelector: {}
+  ingress:
+  - fromEntities:
+    - cluster
+    toPorts:
+    - ports:
+      - port: "443"
+        protocol: TCP
+      rules:
+        http:
+        - method: "POST"
+          path: "/api/.*"
+          headers:
+          - 'X-Real-IP'
+          - 'X-Forwarded-For'
+          - 'X-Content-Type-Options: nosniff'
+---
+apiVersion: securityanalytics.k8s.io/v1alpha1
+kind: ThreatScan
+metadata:
+  name: continuous-threat-scan
+  namespace: support-sphere
+spec:
+  schedule: "*/10 * * * *"
+  scanTypes:
+    - vulnerability
+    - malware
+    - anomaly
+  targets:
+    - pods
+    - nodes
+    - containers
+  actions:
+    - quarantine
+    - alert
+    - log
+  thresholds:
+    criticalVulnerabilities: 0
+    highVulnerabilities: 2
+    malwareDetections: 0
+    anomalyScore: 85
+---
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: support-sphere-restricted
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+defaultAddCapabilities: []
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1
+    max: 65535
+readOnlyRootFilesystem: true
+requiredDropCapabilities:
+  - ALL
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1
+    max: 65535
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret

@@ -1,0 +1,20 @@
+---
+- name: Configure Kubernetes Cluster
+  hosts: kubernetes
+  become: true
+  roles:
+    - common
+    - kubernetes
+
+- name: Configure Monitoring Stack
+  hosts: monitoring
+  become: true
+  roles:
+    - common
+    - monitoring
+
+- name: Deploy Support Sphere Application
+  hosts: master
+  become: true
+  roles:
+    - application

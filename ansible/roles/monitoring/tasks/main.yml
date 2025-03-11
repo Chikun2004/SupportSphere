@@ -1,0 +1,54 @@
+---
+- name: Create monitoring namespace
+  kubernetes.core.k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: monitoring
+
+- name: Add Prometheus Helm repo
+  kubernetes.core.helm_repository:
+    name: prometheus-community
+    repo_url: https://prometheus-community.github.io/helm-charts
+
+- name: Install Prometheus Stack
+  kubernetes.core.helm:
+    name: prometheus
+    chart_ref: prometheus-community/kube-prometheus-stack
+    release_namespace: monitoring
+    values:
+      grafana:
+        adminPassword: "{{ grafana_admin_password }}"
+        persistence:
+          enabled: true
+        dashboards:
+          default:
+            kubernetes-cluster:
+              gnetId: 315
+              revision: 3
+            node-exporter:
+              gnetId: 1860
+              revision: 23
+
+- name: Add Elastic Helm repo
+  kubernetes.core.helm_repository:
+    name: elastic
+    repo_url: https://helm.elastic.co
+
+- name: Install ELK Stack
+  kubernetes.core.helm:
+    name: elk
+    chart_ref: elastic/elastic-stack
+    release_namespace: monitoring
+    values:
+      elasticsearch:
+        replicas: 3
+      kibana:
+        service:
+          type: ClusterIP
+      filebeat:
+        enabled: true
+      metricbeat:
+        enabled: true

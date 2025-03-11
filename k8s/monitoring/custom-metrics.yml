@@ -1,0 +1,93 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: support-sphere-metrics
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: support-sphere-server
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'http_request_duration_.*'
+      action: keep
+  - port: metrics
+    interval: 30s
+    path: /metrics/detailed
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: 'business_metrics_.*'
+      action: keep
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: support-sphere-business-alerts
+  namespace: monitoring
+spec:
+  groups:
+  - name: business
+    rules:
+    - alert: HighTicketVolume
+      expr: rate(ticket_creation_total[5m]) > 10
+      for: 15m
+      labels:
+        severity: warning
+        team: support
+      annotations:
+        summary: High ticket creation rate
+        description: Ticket creation rate is {{ $value }} per minute
+
+    - alert: LongTicketResolutionTime
+      expr: avg_over_time(ticket_resolution_time_seconds[1h]) > 3600
+      for: 30m
+      labels:
+        severity: warning
+        team: support
+      annotations:
+        summary: Long ticket resolution times
+        description: Average resolution time is {{ $value }} seconds
+
+    - alert: UserRegistrationSpike
+      expr: rate(user_registration_total[5m]) > 5
+      for: 10m
+      labels:
+        severity: info
+        team: growth
+      annotations:
+        summary: Unusual user registration activity
+        description: Registration rate is {{ $value }} per minute
+
+    - alert: HighConcurrentChats
+      expr: sum(chat_sessions_active) > 100
+      for: 5m
+      labels:
+        severity: warning
+        team: infrastructure
+      annotations:
+        summary: High number of concurrent chat sessions
+        description: {{ $value }} active chat sessions
+
+    - alert: DatabaseQueryLatency
+      expr: histogram_quantile(0.95, rate(database_query_duration_seconds_bucket[5m])) > 0.1
+      for: 10m
+      labels:
+        severity: warning
+        team: database
+      annotations:
+        summary: High database query latency
+        description: 95th percentile query latency is {{ $value }} seconds
+
+    - alert: CacheHitRateLow
+      expr: rate(cache_hits_total[5m]) / (rate(cache_hits_total[5m]) + rate(cache_misses_total[5m])) < 0.8
+      for: 15m
+      labels:
+        severity: warning
+        team: performance
+      annotations:
+        summary: Low cache hit rate
+        description: Cache hit rate is {{ $value }}%

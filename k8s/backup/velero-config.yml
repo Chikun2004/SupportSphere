@@ -1,0 +1,43 @@
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: support-sphere-daily-backup
+  namespace: velero
+spec:
+  schedule: "0 1 * * *"
+  template:
+    includedNamespaces:
+      - support-sphere
+    includedResources:
+      - "*"
+    excludedResources:
+      - events
+    labelSelector:
+      matchLabels:
+        backup: "true"
+    storageLocation: default
+    volumeSnapshotLocations:
+      - default
+    ttl: 720h
+---
+apiVersion: velero.io/v1
+kind: BackupStorageLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  objectStorage:
+    bucket: support-sphere-backups
+  config:
+    region: us-west-2
+---
+apiVersion: velero.io/v1
+kind: VolumeSnapshotLocation
+metadata:
+  name: default
+  namespace: velero
+spec:
+  provider: aws
+  config:
+    region: us-west-2

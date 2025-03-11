@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: support-sphere-server-service
+  namespace: support-sphere
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5000
+      targetPort: 5000
+      protocol: TCP
+  selector:
+    app: support-sphere-server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: support-sphere-client-service
+  namespace: support-sphere
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: support-sphere-client

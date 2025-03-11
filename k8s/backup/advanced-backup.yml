@@ -1,0 +1,98 @@
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: support-sphere-hourly-backup
+  namespace: velero
+spec:
+  schedule: "0 * * * *"
+  template:
+    includedNamespaces:
+      - support-sphere
+    includedResources:
+      - deployments
+      - services
+      - configmaps
+      - secrets
+    ttl: 24h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: support-sphere-daily-backup
+  namespace: velero
+spec:
+  schedule: "0 0 * * *"
+  template:
+    includedNamespaces:
+      - support-sphere
+    includedResources:
+      - "*"
+    ttl: 168h
+---
+apiVersion: velero.io/v1
+kind: Schedule
+metadata:
+  name: support-sphere-weekly-backup
+  namespace: velero
+spec:
+  schedule: "0 0 * * 0"
+  template:
+    includedNamespaces:
+      - support-sphere
+    includedResources:
+      - "*"
+    ttl: 720h
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-backup-multi-schedule
+  namespace: support-sphere
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mongodb-backup
+            image: mongo:latest
+            command:
+            - /bin/sh
+            - -c
+            - |
+              BACKUP_NAME="mongodb-$(date +%Y%m%d-%H%M%S)"
+              mongodump --uri="${MONGODB_URI}" --archive="/backup/${BACKUP_NAME}.gz" --gzip
+              # Copy to multiple storage locations for redundancy
+              aws s3 cp "/backup/${BACKUP_NAME}.gz" "s3://support-sphere-backups/mongodb/hourly/"
+              if [ "$(date +%H)" == "00" ]; then
+                aws s3 cp "/backup/${BACKUP_NAME}.gz" "s3://support-sphere-backups/mongodb/daily/"
+              fi
+              if [ "$(date +%u)" == "7" ] && [ "$(date +%H)" == "00" ]; then
+                aws s3 cp "/backup/${BACKUP_NAME}.gz" "s3://support-sphere-backups-archive/mongodb/weekly/"
+              fi
+            env:
+            - name: MONGODB_URI
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-backup-credentials
+                  key: uri
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-backup-credentials
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-backup-credentials
+                  key: secret-key
+            volumeMounts:
+            - name: backup-storage
+              mountPath: /backup
+          volumes:
+          - name: backup-storage
+            emptyDir: {}

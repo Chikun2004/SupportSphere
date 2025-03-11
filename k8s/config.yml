@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: support-sphere-config
+  namespace: support-sphere
+data:
+  NODE_ENV: "production"
+  CLIENT_URL: "https://support-sphere.yourdomain.com"
+  SMTP_HOST: "smtp.gmail.com"
+  SMTP_PORT: "587"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: support-sphere-secrets
+  namespace: support-sphere
+type: Opaque
+stringData:
+  JWT_SECRET: "${JWT_SECRET}"
+  MONGODB_URI: "${MONGODB_URI}"
+  SMTP_USER: "${SMTP_USER}"
+  SMTP_PASS: "${SMTP_PASS}"
+  SUPABASE_URL: "${SUPABASE_URL}"
+  SUPABASE_ANON_KEY: "${SUPABASE_ANON_KEY}"

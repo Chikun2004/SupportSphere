@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: support-sphere-client
+  namespace: support-sphere
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: support-sphere-client
+  template:
+    metadata:
+      labels:
+        app: support-sphere-client
+    spec:
+      containers:
+      - name: client
+        image: your-registry/support-sphere-client:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://support-sphere-server-service:5000"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5

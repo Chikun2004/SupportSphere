@@ -1,0 +1,123 @@
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: zero-trust-policy
+  namespace: support-sphere
+spec:
+  selector:
+    matchLabels:
+      app: support-sphere-server
+  action: ALLOW
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/support-sphere/sa/support-sphere-client"]
+        notRequestPrincipals: ["*"]
+    to:
+    - operation:
+        methods: ["GET", "POST"]
+        paths: ["/api/*"]
+    when:
+    - key: request.auth.claims[iss]
+      values: ["https://auth.support-sphere.com"]
+    - key: request.auth.claims[scope]
+      values: ["api:access"]
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: advanced-network-security
+  namespace: support-sphere
+spec:
+  endpointSelector:
+    matchLabels:
+      app: support-sphere-server
+  ingress:
+  - fromEndpoints:
+    - matchLabels:
+        app: support-sphere-client
+    toPorts:
+    - ports:
+      - port: "5000"
+        protocol: TCP
+      rules:
+        http:
+        - method: "GET"
+          path: "/api/v1/.*"
+        - method: "POST"
+          path: "/api/v1/.*"
+          headers:
+          - 'Content-Type: application/json'
+  egress:
+  - toEndpoints:
+    - matchLabels:
+        app: mongodb
+    toPorts:
+    - ports:
+      - port: "27017"
+        protocol: TCP
+---
+apiVersion: falco.security.falco.org/v2beta1
+kind: FalcoRule
+metadata:
+  name: support-sphere-security-rules
+spec:
+  rules:
+    - rule: Unauthorized Access Attempt
+      desc: Detect unauthorized access attempts
+      condition: >
+        evt.type = "security_access" and
+        evt.result = "denied" and
+        container.name startswith "support-sphere"
+      output: "Unauthorized access attempt in container %container.name%"
+      priority: WARNING
+      tags: ["security", "access"]
+
+    - rule: Suspicious Process Execution
+      desc: Detect suspicious process execution
+      condition: >
+        evt.type = "execve" and
+        proc.name in ("nc", "netcat", "ncat", "wget", "curl") and
+        container.name startswith "support-sphere"
+      output: "Suspicious process %proc.name% executed in container %container.name%"
+      priority: WARNING
+      tags: ["security", "process"]
+
+    - rule: Data Exfiltration Attempt
+      desc: Detect potential data exfiltration
+      condition: >
+        evt.type = "connect" and
+        fd.sip != "127.0.0.1" and
+        not fd.sip in (allowed_ips) and
+        container.name startswith "support-sphere"
+      output: "Potential data exfiltration attempt from %container.name% to %fd.sip%"
+      priority: CRITICAL
+      tags: ["security", "exfiltration"]
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: waf-rules
+  namespace: support-sphere
+data:
+  rules.conf: |
+    SecRule REQUEST_HEADERS:User-Agent "@contains script" \
+      "id:1000,\
+      phase:1,\
+      deny,\
+      status:403,\
+      msg:'Malicious User Agent'"
+
+    SecRule REQUEST_COOKIES|!REQUEST_COOKIES:/__utm/|REQUEST_COOKIES_NAMES|ARGS_NAMES|ARGS|XML:/* "@detectXSS" \
+      "id:1001,\
+      phase:2,\
+      deny,\
+      status:403,\
+      msg:'XSS Attack Detected'"
+
+    SecRule REQUEST_FILENAME|ARGS "@contains ../|..|%2e%2e" \
+      "id:1002,\
+      phase:1,\
+      deny,\
+      status:403,\
+      msg:'Directory Traversal Attack'"
